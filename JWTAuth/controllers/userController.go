@@ -1,16 +1,19 @@
 package controllers
 
 import (
+	"context"
 	"net/http"
+	db "simco/JWTAuth/database"
 	helper "simco/JWTAuth/helpers"
 	"simco/JWTAuth/models"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
-var userCollection *gorm.DB = helper.ConnectDB()
+var userCollection *gorm.DB = db.ConnectDB()
 var validate = validator.New()
 
 func HashPassword(password string) (string, error) {
@@ -37,7 +40,7 @@ func SignUp(c *gin.Context) {
 		return
 	}
 	user.Password = hashedPassword
-	result := db.Create(&user)
+	result := userCollection.Create(&user)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 		return
@@ -52,7 +55,7 @@ func Login(c *gin.Context) {
 		return
 	}
 	var foundUser models.User
-	result := db.Where("email = ?", user.Email).First(&foundUser)
+	result := userCollection.Where("email = ?", user.Email).First(&foundUser)
 	if result.Error != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
@@ -66,7 +69,7 @@ func Login(c *gin.Context) {
 
 func GetAllUsers(c *gin.Context) {
 	var users []models.User
-	result := db.Find(&users)
+	result := userCollection.Find(&users)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 		return
@@ -74,13 +77,21 @@ func GetAllUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
-func GetUser(c *gin.Context) {
-	userId := c.Param("userId")
-	var user models.User
-	result := db.First(&user, userId)
-	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
+func GetUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userId := c.Param("user_id")
+
+		if err := helper.MatchUserTypeToUserId(c, userId); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var user models.User
+		result := userCollection.First(&user, userId)
+		if result.Error != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusOK, user)
 	}
-	c.JSON(http.StatusOK, user)
 }

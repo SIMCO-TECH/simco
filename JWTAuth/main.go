@@ -1,20 +1,27 @@
 package main
 
 import (
-	routes "simco/JWTAuth/routes"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
+	"simco/JWTAuth/database"
+	"simco/JWTAuth/models"
+	routes "simco/JWTAuth/routes"
+
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+
+	database.ConnectDB()
+	if err := database.DB.AutoMigrate(&models.User{}); err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
-	}	
-	
+	}
+
 	router := gin.New()
 	router.Use(gin.Logger())
 

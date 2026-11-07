@@ -1,59 +1,50 @@
 package controllers
 
 import (
-	"context"
+	"errors"
 	"log"
 	"net/http"
 	db "simco/JWTAuth/database"
 	helper "simco/JWTAuth/helpers"
 	"simco/JWTAuth/models"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-var userCollection *gorm.DB = db.ConnectDB()
 var validate = validator.New()
 
 func HashPassword(password string) (string, error) {
 	// Implement password hashing logic here (e.g., using bcrypt)
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	// Return the hashed password and any error encountered
-	return "", nil
+	return string(bytes), err
 }
 
 func VerifyPassword(hashedPassword, password string) bool {
 	// Implement password verification logic here (e.g., using bcrypt)
 	// Return true if the password matches the hashed password, false otherwise
-	return false
+	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)) == nil
 }
 
 func SignUp() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
 		var user models.User
 		if err := c.ShouldBindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		validator := validator.New()
-		if err := validator.Struct(user); err != nil {
+		if err := validate.Struct(user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
-		count, err := userCollection.Model(&models.User{}).Where("email = ?", user.Email).Count(&count).Error
-		defer cancel()
-		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		count, err = userCollection.Model(&models.User{}).Where("phone = ?", user.Phone).Count(&count).Error
-		defer cancel()
+		var count int64
+		err := db.DB.Model(&models.User{}).
+			Where("email = ? OR phone = ?", user.Email, user.Phone).
+			Count(&count).Error
 		if err != nil {
 			log.Panic(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -65,52 +56,88 @@ func SignUp() gin.HandlerFunc {
 			return
 		}
 
-		user.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		user.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		user.ID = 0
-
 		hashedPassword, err := HashPassword(user.Password)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		user.Password = hashedPassword
-		result := userCollection.Create(&user)
-		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		user.ID = 0 // Ensure ID is zero to let GORM auto-increment it
+
+		// 1. Save the user (GORM fills user.ID, CreatedAt, UpdatedAt)
+		if err := db.DB.Create(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+
+		// 2. Generate tokens now that the ID exists
+		token, refreshToken, err := helper.GenerateAllTokens(user.Email, user.Name, user.UserType, user.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// 3. Store the tokens on the same row
+		user.Token = token
+		user.RefreshToken = refreshToken
+		if err := db.DB.Model(&user).Updates(map[string]interface{}{
+			"token":         token,
+			"refresh_token": refreshToken,
+		}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save tokens to the database"})
+			return
+		}
+
+		user.Password = "" // Clear the password before sending the response
 		c.JSON(http.StatusCreated, user)
 	}
 }
 
 func Login() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var user models.User
-		if err := c.ShouldBindJSON(&user); err != nil {
+		var input struct {
+			Email    string `json:"email" binding:"required,email"`
+			Password string `json:"password" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		var foundUser models.User
-		result := userCollection.Where("email = ?", user.Email).First(&foundUser)
-		if result.Error != nil {
+		if err := db.DB.Where("email = ?", input.Email).First(&foundUser).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 			return
 		}
-		if !VerifyPassword(foundUser.Password, user.Password) {
+		if !VerifyPassword(foundUser.Password, input.Password) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 			return
 		}
+		foundUser.Password = "" // Clear the password before sending the response
 		c.JSON(http.StatusOK, foundUser)
+
+		token, refreshToken, err := helper.GenerateAllTokens(foundUser.Email, foundUser.Name, foundUser.UserType, foundUser.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate tokens"})
+			return
+		}
+		if err := helper.UpdateAllTokens(token, refreshToken, foundUser.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save tokens"})
+			return
+		}
+		foundUser.Token = token
+		foundUser.RefreshToken = refreshToken
 	}
 }
+
 func GetAllUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var users []models.User
-		result := userCollection.Find(&users)
-		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		if err := db.DB.Find(&users).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		for i := range users {
+			users[i].Password = "" // Clear the password before sending the response
 		}
 		c.JSON(http.StatusOK, users)
 	}
@@ -124,14 +151,17 @@ func GetUser() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var user models.User
-		result := userCollection.First(&user, userId)
-		defer cancel()
-		if result.Error != nil {
+		err := db.DB.Where("id = ?", userId).First(&user).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		user.Password = "" // Clear the password before sending the response
 		c.JSON(http.StatusOK, user)
 	}
 }

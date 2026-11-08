@@ -6,26 +6,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func CheckUserType(c *gin.Context, role string) (err error) {
-	userType := c.GetString("user_type")
-	err = nil
-	if userType != role {
-		err = errors.New("Unauthorized to access this resource")
-		return err
+func CheckUserType(c *gin.Context, role string)  error {
+	if c.GetString("user_type") != role {
+		return errors.New("Unauthorized to access this resource")
 	}
-	return err
+	return nil
 }
 
-func MatchUserTypeToUserId(c *gin.Context, userId string) (err error) {
+func MatchUserTypeToUserId(c *gin.Context, userId string)  error {
 	userType := c.GetString("user_type")
 	uid := c.GetString("uid")
-	err = nil
-
+	
+	// A normal USER may only access their own record. ADMIN can access any.
 	if userType == "USER" && uid != userId {
-		err = errors.New("Unauthorized to access this resource")
-		return err
+		return errors.New("Unauthorized to access this resource")
 	}
-	err = CheckUserType(c, userType)
-
-	return err
+	return nil
 }
+

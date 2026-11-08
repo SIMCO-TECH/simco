@@ -25,7 +25,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 
-	routes.AuthRoutes(router)
+	routes.AuthRoutes(router) // signup and login stay public
 	routes.UserRoutes(router)
 
 	router.GET("/api-1", func(c *gin.Context) {

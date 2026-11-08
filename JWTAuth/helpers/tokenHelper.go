@@ -88,7 +88,7 @@ func ValidateToken(signedToken string) (*SignedDetails, error) {
 	return claims, nil
 }
 
-func UpdateAllTokens(signedToken, signedRefreshToken string, userId uint) error {
+func UpdateAllTokens(signedToken string, signedRefreshToken string, userId uint) error {
 	return database.DB.Model(&models.User{}).
 		Where("id = ?", userId).
 		Updates(map[string]interface{}{

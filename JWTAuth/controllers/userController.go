@@ -7,7 +7,7 @@ import (
 	db "simco/JWTAuth/database"
 	helper "simco/JWTAuth/helpers"
 	"simco/JWTAuth/models"
-
+	"strconv"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
@@ -46,7 +46,6 @@ func SignUp() gin.HandlerFunc {
 			Where("email = ? OR phone = ?", user.Email, user.Phone).
 			Count(&count).Error
 		if err != nil {
-			log.Panic(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -78,6 +77,10 @@ func SignUp() gin.HandlerFunc {
 		}
 
 		// 3. Store the tokens on the same row
+		if err := helper.UpdateAllTokens(token, refreshToken, user.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save tokens to the database"})
+			return
+		}
 		user.Token = token
 		user.RefreshToken = refreshToken
 		if err := db.DB.Model(&user).Updates(map[string]interface{}{
@@ -131,15 +134,33 @@ func Login() gin.HandlerFunc {
 
 func GetAllUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var users []models.User
-		if err := db.DB.Find(&users).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if err := helper.CheckUserType(c, "ADMIN"); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
-		for i := range users {
-			users[i].Password = "" // Clear the password before sending the response
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+		if page < 1 {
+    		page = 1
 		}
-		c.JSON(http.StatusOK, users)
+		if limit < 1 || limit > 100 {
+    		limit = 10
+		}
+
+		var total int64
+		db.DB.Model(&models.User{}).Count(&total)
+
+		var users []models.User
+		if err := db.DB.Select("id", "name", "email", "phone", "user_type", "created_at", "updated_at").
+    			Order("id").Limit(limit).Offset((page - 1) * limit).Find(&users).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"total_count": total,
+			"page":        page,
+			"users":       users,
+		})
 	}
 }
 

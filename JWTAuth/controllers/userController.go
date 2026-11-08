@@ -2,16 +2,15 @@ package controllers
 
 import (
 	"errors"
-	"log"
-	"net/http"
-	db "simco/JWTAuth/database"
-	helper "simco/JWTAuth/helpers"
-	"simco/JWTAuth/models"
-	"strconv"
+	db "github.com/SIMCO-TECH/simco/JWTAuth/database"
+	helper "github.com/SIMCO-TECH/simco/JWTAuth/helpers"
+	"github.com/SIMCO-TECH/simco/JWTAuth/models"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"net/http"
+	"strconv"
 )
 
 var validate = validator.New()
@@ -141,10 +140,10 @@ func GetAllUsers() gin.HandlerFunc {
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 		if page < 1 {
-    		page = 1
+			page = 1
 		}
 		if limit < 1 || limit > 100 {
-    		limit = 10
+			limit = 10
 		}
 
 		var total int64
@@ -152,9 +151,9 @@ func GetAllUsers() gin.HandlerFunc {
 
 		var users []models.User
 		if err := db.DB.Select("id", "name", "email", "phone", "user_type", "created_at", "updated_at").
-    			Order("id").Limit(limit).Offset((page - 1) * limit).Find(&users).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
+			Order("id").Limit(limit).Offset((page - 1) * limit).Find(&users).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"total_count": total,

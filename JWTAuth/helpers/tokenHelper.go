@@ -2,9 +2,9 @@ package helper
 
 import (
 	"errors"
+	"github.com/SIMCO-TECH/simco/JWTAuth/database"
+	"github.com/SIMCO-TECH/simco/JWTAuth/models"
 	"os"
-	"simco/JWTAuth/database"
-	"simco/JWTAuth/models"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v4"
@@ -36,7 +36,7 @@ func GenerateAllTokens(email string, name string, userType string, userId uint) 
 		Email:    email,
 		Name:     name,
 		UserType: userType,
-		UserId:   userId,
+		UserId:   uint64(userId),
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
 		},
@@ -52,7 +52,7 @@ func GenerateAllTokens(email string, name string, userType string, userId uint) 
 	if err != nil {
 		return "", "", err
 	}
-	refreshToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(key)
+	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(key)
 	if err != nil {
 		return "", "", err
 	}
@@ -67,7 +67,7 @@ func ValidateToken(signedToken string) (*SignedDetails, error) {
 		return nil, err
 	}
 
-	token, err = jwt.ParseWithClaims(signedToken, &SignedDetails{}, func(t *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(signedToken, &SignedDetails{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}

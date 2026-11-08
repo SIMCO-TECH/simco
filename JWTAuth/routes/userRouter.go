@@ -1,8 +1,8 @@
 package routes
 
 import (
-	controller "simco/JWTAuth/controllers"
-	middleware "simco/JWTAuth/middleware"
+	controller "github.com/SIMCO-TECH/simco/JWTAuth/controllers"
+	middleware "github.com/SIMCO-TECH/simco/JWTAuth/middleware"
 
 	"github.com/gin-gonic/gin"
 )

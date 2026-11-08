@@ -1,11 +1,11 @@
 package main
 
 import (
+	"github.com/SIMCO-TECH/simco/JWTAuth/database"
+	"github.com/SIMCO-TECH/simco/JWTAuth/models"
+	routes "github.com/SIMCO-TECH/simco/JWTAuth/routes"
 	"log"
 	"os"
-	"simco/JWTAuth/database"
-	"simco/JWTAuth/models"
-	routes "simco/JWTAuth/routes"
 
 	"github.com/gin-gonic/gin"
 )

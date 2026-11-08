@@ -1,12 +1,12 @@
 package routes
 
 import (
-	controller "simco/JWTAuth/controllers"
+	controller "github.com/SIMCO-TECH/simco/JWTAuth/controllers"
 	"github.com/gin-gonic/gin"
 )
 
 func AuthRoutes(incomingRouter *gin.Engine) {
-	incomingRouter.POST("users/signup", controller.Signup())
-	incomingRouter.POST("users/login", controller.Login())
-	
+	incomingRouter.POST("/users/signup", controller.SignUp())
+	incomingRouter.POST("/users/login", controller.Login())
+
 }

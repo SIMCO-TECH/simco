@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"errors"
+	"net/http"
+	"strconv"
+
 	db "github.com/SIMCO-TECH/simco/JWTAuth/database"
 	helper "github.com/SIMCO-TECH/simco/JWTAuth/helpers"
 	"github.com/SIMCO-TECH/simco/JWTAuth/models"
@@ -9,8 +12,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"net/http"
-	"strconv"
 )
 
 var validate = validator.New()
@@ -114,8 +115,6 @@ func Login() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 			return
 		}
-		foundUser.Password = "" // Clear the password before sending the response
-		c.JSON(http.StatusOK, foundUser)
 
 		token, refreshToken, err := helper.GenerateAllTokens(foundUser.Email, foundUser.Name, foundUser.UserType, foundUser.ID)
 		if err != nil {
@@ -128,6 +127,10 @@ func Login() gin.HandlerFunc {
 		}
 		foundUser.Token = token
 		foundUser.RefreshToken = refreshToken
+		foundUser.Password = "" // Clear the password before sending the response
+
+		c.JSON(http.StatusOK, foundUser)
+
 	}
 }
 
